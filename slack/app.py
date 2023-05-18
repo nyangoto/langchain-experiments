@@ -8,6 +8,9 @@ from slack_bolt import App
 from dotenv import find_dotenv, load_dotenv
 from flask import Flask, abort, request
 from functions import draft_email
+import logging
+import sys
+
 
 # Load environment variables from .env file
 load_dotenv(find_dotenv())
