@@ -11,6 +11,12 @@ from functions import draft_email
 import logging
 import sys
 
+# Configure the logging level and format
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    stream=sys.stdout,
+)
 
 # Load environment variables from .env file
 load_dotenv(find_dotenv())
@@ -22,47 +28,13 @@ SLACK_BOT_USER_ID = os.environ["SLACK_BOT_USER_ID"]
 
 # Initialize the Slack app
 app = App(token=SLACK_BOT_TOKEN)
+signature_verifier = SignatureVerifier(SLACK_SIGNING_SECRET)
 
 # Initialize the Flask app
 # Flask is a web application framework written in Python
 flask_app = Flask(__name__)
 handler = SlackRequestHandler(app)
 
-
-def get_bot_user_id():
-    """
-    Get the bot user ID using the Slack API.
-    Returns:
-        str: The bot user ID.
-    """
-    try:
-        # Initialize the Slack client with your bot token
-        slack_client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
-        response = slack_client.auth_test()
-        return response["user_id"]
-    except SlackApiError as e:
-        print(f"Error: {e}")
-        
-user_id = get_bot_user_id()
-print(f"Bot User ID: {user_id}")
-
-
-def my_function(text):
-    """
-    Custom function to process the text and return a response.
-    In this example, the function converts the input text to uppercase.
-
-    Args:
-        text (str): The input text to process.
-
-    Returns:
-        str: The processed text.
-    """
-    response = text.upper()
-    return response
-
-
-signature_verifier = SignatureVerifier(SLACK_SIGNING_SECRET)
 
 def require_slack_verification(f):
     @wraps(f)
@@ -91,6 +63,37 @@ def verify_slack_request():
         signature=signature,
     )
 
+
+def get_bot_user_id():
+    """
+    Get the bot user ID using the Slack API.
+    Returns:
+        str: The bot user ID.
+    """
+    try:
+        # Initialize the Slack client with your bot token
+        slack_client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
+        response = slack_client.auth_test()
+        return response["user_id"]
+    except SlackApiError as e:
+        print(f"Error: {e}")
+
+
+def my_function(text):
+    """
+    Custom function to process the text and return a response.
+    In this example, the function converts the input text to uppercase.
+
+    Args:
+        text (str): The input text to process.
+
+    Returns:
+        str: The processed text.
+    """
+    response = text.upper()
+    return response
+
+
 @app.event("app_mention")
 def handle_mentions(body, say):
     """
@@ -105,18 +108,18 @@ def handle_mentions(body, say):
 
     mention = f"<@{SLACK_BOT_USER_ID}>"
     text = text.replace(mention, "").strip()
+    logging.info("Received text: " + text.replace("\n", " "))
 
     say("Sure, I'll get right on that!")
     # response = my_function(text)
     response = draft_email(text)
+    logging.info("Generated response: " + response.replace("\n", " "))
     say(response)
 
 
+# Demo
 @flask_app.route("/slack/events", methods=["POST"])
 @require_slack_verification
-def slack_events():
-    return handler.handle(request)
-
 def slack_events():
     """
     Route for handling Slack events.
@@ -125,9 +128,11 @@ def slack_events():
     Returns:
         Response: The result of handling the request.
     """
+
     return handler.handle(request)
 
 
 # Run the Flask app
 if __name__ == "__main__":
+    logging.info("Flask app started")
     flask_app.run(host="0.0.0.0", port=8000)
